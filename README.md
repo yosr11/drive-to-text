@@ -10,6 +10,14 @@ Connect a Google Drive folder using its share URL. The application validates tha
 
 The frontend is a local development interface by default. It calls the backend at `http://localhost:8000`; it does not contain sample data or simulated processing results.
 
+### Public demonstration folder
+
+The public Google Drive folder used for testing and demonstration is:
+
+https://drive.google.com/drive/folders/12U8yuf2EOL5UPj2RF4uIJ8VJSUnjI32J
+
+It can be pasted directly into the application. Access must remain public for anyone with the link; if the folder permissions are changed or the folder is removed, validation and integration tests that use it may fail.
+
 ## 2. Features
 
 - Validate public Google Drive folder URLs and show folder information.
@@ -19,6 +27,7 @@ The frontend is a local development interface by default. It calls the backend a
 - Choose OCR languages: English (`eng`), French (`fra`), Arabic (`ara`), or supported combinations.
 - Extract embedded PDF text and use OCR for scanned PDF pages and image files.
 - Show per-file status, extraction method, extracted text, and errors.
+- Update batch and per-file statuses while extraction is running.
 - Copy extracted text and view its character count.
 - Download a JSON export for a completed batch.
 - Display API errors and operation loading states in the UI.
@@ -47,32 +56,45 @@ drive-to-text/
 │   ├── package.json
 │   └── vite.config.js
 ├── LICENSE                   # Project MIT license
-├── LICENSE.md                # Third-party license notices
+├── LICENSES.md               # Dependency versions, licenses, and commercial use
+├── LICENSE.md                # Supplementary third-party license notices
+├── examples/
+│   └── sample-batch.json     # Sample export from the public test Drive folder
+├── .gitignore
 └── requirements.txt          # Python dependency list
 ```
 
 The frontend calls the backend REST API over HTTP. The backend retrieves folder metadata and file bytes from the Google Drive API, performs extraction locally, and returns batch results. The frontend and backend are separate processes; run both during local development.
 
-## 4. Technologies Used
+## 4. Technologies Used and Their Justification
 
-**Frontend**
+### Frontend
 
-- React and React DOM
-- Vite
-- JavaScript and React Hooks
-- Tailwind CSS
-- Axios
-- Lucide React
+- **React 19**: React is used to model the interface as reusable components and to manage the application's interactive state. Hooks are particularly suited to this workflow because they track the selected folder, selected files, processing progress, displayed results, and extraction errors while keeping the code organised.
+- **Vite**: Vite provides a fast development server and an optimised production build. It is a suitable fit for this focused single-page application and avoids the configuration and runtime overhead of a full-stack framework.
+- **JavaScript**: JavaScript is the native language of the React ecosystem and communicates directly with browser APIs such as the clipboard and file download mechanism. It provides a simple integration point with the REST API exposed by the backend.
+- **Tailwind CSS**: Tailwind is used to build a consistent, responsive interface efficiently. It provides reusable design conventions for layout, spacing, states, typography, and smaller-screen adaptations without requiring a large custom CSS framework.
+- **Axios**: Axios centralises HTTP communication with FastAPI, handles JSON requests, supports connection and response errors, and makes binary Blob downloads possible for the JSON export.
+- **Lucide React**: Lucide provides lightweight SVG icons that remain consistent with the interface style and can be adapted through React properties such as size and stroke width.
 
-**Backend**
+### Backend
 
-- Python
-- FastAPI and Pydantic
-- Uvicorn
-- Google Drive API v3 via HTTP requests
-- PyMuPDF and pypdf for PDF processing
-- Pillow and pytesseract for OCR integration
-- Tesseract OCR executable and language data
+- **Python**: Python is appropriate for this document-processing application because it offers a mature ecosystem for PDF libraries, image manipulation, OCR, testing, and API development.
+- **FastAPI**: FastAPI provides a structured HTTP API with automatic request validation and interactive OpenAPI documentation. It was chosen for the speed of development and for the clear separation it creates between Drive operations, batch processing, and result retrieval.
+- **Pydantic**: Pydantic validates request and response structures. It limits malformed data sent by the frontend and gives batch, file, and export responses a stable and predictable schema.
+- **Uvicorn**: Uvicorn is an ASGI server that runs FastAPI efficiently in local development and can serve the application in a future production deployment.
+- **Google Drive API v3**: The Drive API removes the need for manual file uploads. It allows the backend to validate a publicly shared folder, list the supported documents, and retrieve the bytes of only the files selected by the user.
+- **PyMuPDF and pypdf**: These libraries provide complementary PDF handling. pypdf extracts text embedded in PDF pages, while PyMuPDF is used to render PDF pages as images when extraction by text alone is insufficient or a page contains scanned content.
+- **Pillow**: Pillow opens, validates, and normalises PNG, JPEG, and rendered PDF images into RGB before OCR. It provides a consistent image representation and clear handling for malformed or empty images.
+- **Tesseract OCR and pytesseract**: Tesseract performs local recognition of text in images and scanned PDF pages. pytesseract exposes it to Python, while configurable language data supports English, French, Arabic, and selected combinations. Local OCR avoids sending documents to an external AI or OCR service.
+- **JSON**: JSON is used as the portable export format for batch metadata and per-file results. It preserves status, extraction method, extracted text, and error details in a structured form that can be downloaded, archived, or consumed by another application.
+- **pytest**: pytest enables isolated tests for Drive URL handling, API routes, batch state, PDF processing, OCR integration, and JSON export. It helps verify that changes in one service do not silently break another part of the pipeline.
+
+### Architecture rationale
+
+React and FastAPI are separated to isolate the interactive interface from document-processing responsibilities. The frontend manages navigation and user feedback, while the backend owns Google Drive access, selected-file downloads, PDF extraction, OCR, batch state, and export generation. API credentials and Tesseract processing therefore remain on the backend and are not exposed to the browser.
+
+This separation keeps the system understandable for a small project and allows independent evolution. For example, the extraction engine could later use a persistent queue or database, while an alternative frontend could consume the same REST API. The architecture is also local-first: it requires no third-party OCR service and can be run on a machine that has the Google API key and Tesseract installed.
 
 ## 5. Prerequisites
 
@@ -116,11 +138,14 @@ python -m pip install --upgrade pip
 python -m pip install -r backend/requirements.txt
 ```
 
-Create `backend/.env` and set your Google API key:
+Copy the example configuration and set your Google API key in `backend/.env`:
 
 ```dotenv
 GOOGLE_DRIVE_API_KEY=your_google_drive_api_key
+TESSERACT_CMD=
 ```
+
+For PowerShell, run `Copy-Item backend\.env.example backend\.env`; on macOS/Linux, run `cp backend/.env.example backend/.env`. The example file contains no credentials.
 
 Install Tesseract OCR separately using the package manager or installer for your operating system. Make sure the required `.traineddata` language files are installed; installing the Python `pytesseract` package alone does not install Tesseract itself or its language data.
 
@@ -240,13 +265,13 @@ Request:
 
 `selected_file_ids` is optional for backward compatibility. When supplied, it must contain at least one file ID belonging to the folder; only those files are included in the batch. When omitted, all supported files in the folder are processed. `language` defaults to `eng` and accepts the OCR language codes shown in the Features section.
 
-The processing response contains `batch_id`, `status`, `total_files`, `successful_files`, `failed_files`, and per-file results. Per-file results include the Drive `file_id`, `filename`, `mime_type`, `status`, `method`, `text`, and `error`.
+The endpoint responds with HTTP `202 Accepted` and a batch whose files initially have `pending` status. Processing continues in the background. Per-file results include the Drive `file_id`, `filename`, `mime_type`, `status`, `method`, `text`, and `error`.
 
 ### Retrieve batch results
 
 `GET /api/batches/{batch_id}`
 
-Returns the stored batch result using the same response shape as batch creation.
+Returns the current stored batch result using the same response shape as batch creation. Poll this endpoint while the batch or any file is `pending` or `processing`; successful files become `done`, failures become `failed`, and the batch ends as `done`.
 
 ### Export batch results
 
@@ -265,7 +290,7 @@ Returns a JSON attachment named `batch_<batch_id>.json` with this export schema:
     {
       "filename": "invoice.pdf",
       "status": "done",
-      "method": "pdf_text_ocr",
+      "method": "pdf_text",
       "text": "Extracted text...",
       "error": null
     }
@@ -273,7 +298,7 @@ Returns a JSON attachment named `batch_<batch_id>.json` with this export schema:
 }
 ```
 
-The export status is `completed` when there are no failed files and `completed_with_errors` when one or more files failed. The export result entries intentionally omit internal Drive IDs and MIME types.
+PDF results report `pdf_text` when only the PDF parser was used and `pdf_text_ocr` when OCR was applied to scanned pages or embedded images. Image files report `ocr`. The export status is `completed` when there are no failed files and `completed_with_errors` when one or more files failed. The export result entries intentionally omit internal Drive IDs and MIME types.
 
 ## 10. Testing
 
@@ -290,7 +315,7 @@ To run focused tests for batch processing and the export schema:
 python -m pytest tests/test_batch_route.py -q
 ```
 
-The batch-service integration test contacts Google Drive and may require a valid API key, network access, and its referenced public Drive folder to remain available. OCR tests that invoke Tesseract require the relevant executable and language data. Some PDF OCR tests may also depend on Tesseract.
+The batch-service integration test contacts Google Drive and may require a valid API key, network access, and its referenced public Drive folder to remain available. The committed sample export was generated from that public test folder. OCR tests that invoke Tesseract require the relevant executable and language data. Some PDF OCR tests may also depend on Tesseract.
 
 Run frontend production compilation and linting from `frontend/`:
 
@@ -301,7 +326,9 @@ npm run lint
 
 ## 11. Sample JSON Output
 
-Example of the **export endpoint** response when a batch has one successful file and one failed file:
+[`examples/sample-batch.json`](./examples/sample-batch.json) is a sample export generated from `OCR-LLM.pdf` in the public Drive test folder used by the backend integration test. Its `text` field is limited to an 80-character excerpt to keep the committed sample small; the application export contains the full extracted text. Review it before publishing if the test folder's contents change.
+
+The **export endpoint** has this response shape:
 
 ```json
 {
@@ -314,7 +341,7 @@ Example of the **export endpoint** response when a batch has one successful file
     {
       "filename": "invoice.pdf",
       "status": "done",
-      "method": "pdf_text_ocr",
+      "method": "pdf_text",
       "text": "Invoice number: 1042",
       "error": null
     },
@@ -335,9 +362,9 @@ The processing and batch-retrieval endpoints use a different response schema: th
 
 The project is distributed under the MIT License. See [`LICENSE`](./LICENSE) for the full text.
 
-Third-party packages and notices are listed in [`LICENSE.md`](./LICENSE.md), with generated dependency inventories in [`backend/python-licenses.md`](./backend/python-licenses.md) and [`frontend/npm-licenses.md`](./frontend/npm-licenses.md).
+Third-party dependency versions, licenses, commercial-use notes, and the PyMuPDF copyleft decision are documented in [`LICENSES.md`](./LICENSES.md). Detailed inventories are in [`backend/python-licenses.md`](./backend/python-licenses.md) and [`frontend/npm-licenses.md`](./frontend/npm-licenses.md); supplementary notices are in [`LICENSE.md`](./LICENSE.md).
 
-**Important:** PyMuPDF is dual-licensed under GNU AGPL-3.0 or a commercial Artifex license. Review and comply with the applicable PyMuPDF terms before distributing or deploying this application. Tesseract OCR is Apache-2.0 licensed; Google Drive API usage is also subject to Google's applicable terms. The project's MIT license does not replace third-party licenses.
+**Important:** This open-source POC uses PyMuPDF under its AGPL-3.0 option. It is not cleared for closed-source commercial deployment unless a separate Artifex commercial license is obtained or PyMuPDF is replaced. Tesseract OCR is Apache-2.0 licensed; Google Drive API usage is also subject to Google's applicable terms. The project's MIT license does not replace third-party licenses.
 
 ## 13. Known Limitations
 

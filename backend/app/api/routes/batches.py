@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Response
 
 from app.schemas.batch import (
     BatchCreateRequest,
@@ -31,11 +31,13 @@ router = APIRouter(
 # POST /api/batches
 # ============================================================
 
-@router.post("", response_model=BatchResponse)
-def create_and_process_batch(request: BatchCreateRequest):
+@router.post("", response_model=BatchResponse, status_code=202)
+def create_and_process_batch(
+    request: BatchCreateRequest,
+    background_tasks: BackgroundTasks
+):
     """
-    Crée un batch à partir d'un dossier Google Drive,
-    puis traite les fichiers individuellement.
+    Crée un batch et planifie son traitement en arrière-plan.
     """
 
     try:
@@ -76,13 +78,13 @@ def create_and_process_batch(request: BatchCreateRequest):
         # 3. Créer le batch
         batch = create_batch(files)
 
-        # 4. Traiter les fichiers
-        result = process_batch(
+        background_tasks.add_task(
+            process_batch,
             batch_id=batch["batch_id"],
-            language=request.language
+            language=request.language,
         )
 
-        return result
+        return batch
 
     except HTTPException:
         raise

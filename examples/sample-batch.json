@@ -1,0 +1,16 @@
+{
+  "batch_id": "2bf84247-57b2-422c-b3a3-b74cff2039d2",
+  "status": "completed",
+  "total": 1,
+  "success": 1,
+  "failed": 0,
+  "results": [
+    {
+      "filename": "OCR-LLM.pdf",
+      "status": "done",
+      "method": "pdf_text_ocr",
+      "text": "--- Page 1 ---\nC’est quoi OCR ?  \nOCR stands for Optical Character Recognition (...",
+      "error": null
+    }
+  ]
+}

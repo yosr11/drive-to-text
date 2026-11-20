@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Check, Download, FileSearch, LoaderCircle } from 'lucide-react'
 import {
   createBatch,
@@ -43,6 +43,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [batch, setBatch] = useState(null)
+  const [batchId, setBatchId] = useState(null)
   const [activeFile, setActiveFile] = useState(null)
   const [notice, setNotice] = useState(null)
   const [apiStatus, setApiStatus] = useState('unchecked')
@@ -61,9 +62,11 @@ function App() {
     setFiles([])
     setSelectedIds([])
     setBatch(null)
+    setBatchId(null)
     setActiveFile(null)
     setValidationState('idle')
     setNotice(null)
+    setIsProcessing(false)
   }
 
   async function handleValidate(event) {
@@ -87,7 +90,9 @@ function App() {
     setFiles([])
     setSelectedIds([])
     setBatch(null)
+    setBatchId(null)
     setActiveFile(null)
+    setIsProcessing(false)
 
     try {
       const validatedFolder = await validateFolder(folderUrl.trim())
@@ -121,6 +126,47 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    if (!batchId || !isProcessing) return undefined
+
+    let cancelled = false
+    let timeoutId
+
+    async function pollBatch() {
+      try {
+        const latestBatch = await getBatch(batchId)
+        if (cancelled) return
+
+        setBatch(latestBatch)
+        if (['pending', 'processing'].includes(latestBatch.status)) {
+          timeoutId = window.setTimeout(pollBatch, 700)
+          return
+        }
+
+        setIsProcessing(false)
+        setNotice(
+          latestBatch.status === 'failed'
+            ? { type: 'error', message: 'Batch processing failed. Review the batch status and try again.' }
+            : { type: 'success', message: 'Processing finished. Your results are ready below.' },
+        )
+      } catch (error) {
+        if (cancelled) return
+        setIsProcessing(false)
+        setApiStatus(isApiConnectionError(error) ? 'disconnected' : 'connected')
+        setNotice({
+          type: 'error',
+          message: `Could not retrieve batch progress: ${await getApiErrorMessage(error)}`,
+        })
+      }
+    }
+
+    timeoutId = window.setTimeout(pollBatch, 300)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [batchId, isProcessing])
+
   function handleToggleFile(fileId) {
     setSelectedIds((current) =>
       current.includes(fileId) ? current.filter((id) => id !== fileId) : [...current, fileId],
@@ -139,27 +185,18 @@ function App() {
     setIsProcessing(true)
     setNotice(null)
     setBatch(null)
+    setBatchId(null)
     setActiveFile(null)
 
     try {
       const createdBatch = await createBatch(folderUrl.trim(), language, selectedIds)
       setApiStatus('connected')
-      try {
-        const storedBatch = await getBatch(createdBatch.batch_id)
-        setBatch(storedBatch)
-        setNotice({ type: 'success', message: 'Processing finished. Your results are ready below.' })
-      } catch (error) {
-        setBatch(createdBatch)
-        setNotice({
-          type: 'error',
-          message: `The batch was created, but its saved results could not be refreshed: ${await getApiErrorMessage(error)}`,
-        })
-      }
+      setBatch(createdBatch)
+      setBatchId(createdBatch.batch_id)
     } catch (error) {
+      setIsProcessing(false)
       setApiStatus(isApiConnectionError(error) ? 'disconnected' : 'connected')
       setNotice({ type: 'error', message: await getApiErrorMessage(error) })
-    } finally {
-      setIsProcessing(false)
     }
   }
 
@@ -284,7 +321,14 @@ function App() {
           {isProcessing && (
             <div className="processing-banner" role="status">
               <LoaderCircle size={18} className="spin" />
-              <div><strong>Processing selected files</strong><span>This may take a little while for image-heavy files.</span></div>
+              <div>
+                <strong>Processing selected files</strong>
+                <span>
+                  {batch
+                    ? `${batch.successful_files + batch.failed_files} of ${batch.total_files} files finished.`
+                    : 'Preparing your selected files…'}
+                </span>
+              </div>
             </div>
           )}
 
@@ -298,7 +342,7 @@ function App() {
                     <p>Review extracted text and download the complete JSON.</p>
                   </div>
                 </div>
-                <button className="button button-secondary export-button" type="button" onClick={handleExport} disabled={isExporting}>
+                <button className="button button-secondary export-button" type="button" onClick={handleExport} disabled={isExporting || isProcessing}>
                   {isExporting ? <LoaderCircle size={16} className="spin" /> : <Download size={16} />}
                   {isExporting ? 'Exporting…' : 'Export JSON'}
                 </button>

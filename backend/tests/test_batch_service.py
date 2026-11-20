@@ -5,6 +5,7 @@ from app.services.batch_service import (
     process_batch,
     get_batch_result
 )
+from app.services import batch_service
 from app.utils.drive_url import extract_folder_id
 
 
@@ -12,6 +13,32 @@ FOLDER_URL = (
     "https://drive.google.com/drive/folders/"
     "12U8yuf2EOL5UPj2RF4uIJ8VJSUnjI32J"
 )
+
+
+def test_batch_result_exposes_per_file_progress(monkeypatch):
+    batch = create_batch([
+        {"id": "file-1", "name": "one.pdf", "mimeType": "application/pdf"},
+        {"id": "file-2", "name": "two.png", "mimeType": "image/png"},
+    ])
+    observed_progress = []
+
+    def finish_file(file_result, language):
+        if file_result["file_id"] == "file-1":
+            file_result["status"] = "done"
+        else:
+            observed_progress.append(get_batch_result(batch["batch_id"]))
+            file_result["status"] = "failed"
+
+    monkeypatch.setattr(batch_service, "process_single_file", finish_file)
+
+    result = process_batch(batch["batch_id"])
+
+    assert observed_progress[0]["status"] == "processing"
+    assert observed_progress[0]["results"][0]["status"] == "done"
+    assert observed_progress[0]["successful_files"] == 1
+    assert result["status"] == "done"
+    assert result["successful_files"] == 1
+    assert result["failed_files"] == 1
 
 
 def test_batch_processing():

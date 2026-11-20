@@ -215,7 +215,7 @@ def test_extract_pdf_text_with_ocr_native(
 
     result = pdf_service.extract_pdf_text_with_ocr(sample_pdf)
 
-    assert result["method"] == "pdf_text_ocr"
+    assert result["method"] == "pdf_text"
     assert "Ceci est un document PDF de test." in result["text"]
 
 

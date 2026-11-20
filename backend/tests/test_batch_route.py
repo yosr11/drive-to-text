@@ -1,5 +1,6 @@
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
+from fastapi.testclient import TestClient
 
 from app.api.routes import batches
 from app.schemas.batch import BatchCreateRequest
@@ -22,45 +23,88 @@ def configure_batch_route(monkeypatch):
 
     def create_batch(files):
         created_files.extend(files)
-        return {"batch_id": "batch-1"}
+        return {
+            "batch_id": "batch-1",
+            "status": "pending",
+            "total_files": len(files),
+            "successful_files": 0,
+            "failed_files": 0,
+            "results": [
+                {
+                    "file_id": file["id"],
+                    "filename": file["name"],
+                    "mime_type": file["mimeType"],
+                    "status": "pending",
+                    "method": None,
+                    "text": None,
+                    "error": None,
+                }
+                for file in files
+            ],
+        }
 
     monkeypatch.setattr(batches, "create_batch", create_batch)
+    scheduled_batches = []
+
+    def process_batch(batch_id, language):
+        scheduled_batches.append((batch_id, language))
+
     monkeypatch.setattr(
         batches,
         "process_batch",
-        lambda batch_id, language: {
-            "batch_id": batch_id,
-            "status": "done",
-            "total_files": len(created_files),
-            "successful_files": len(created_files),
-            "failed_files": 0,
-            "results": [],
-        },
+        process_batch,
     )
-    return created_files
+    return created_files, scheduled_batches
 
 
 def test_batch_processes_only_selected_file(monkeypatch):
-    created_files = configure_batch_route(monkeypatch)
+    created_files, scheduled_batches = configure_batch_route(monkeypatch)
     request = BatchCreateRequest(
         folder_url="https://drive.google.com/drive/folders/folder-1",
         language="fra",
         selected_file_ids=["file-2"],
     )
 
-    result = batches.create_and_process_batch(request)
+    background_tasks = BackgroundTasks()
+    result = batches.create_and_process_batch(request, background_tasks)
 
     assert [file["id"] for file in created_files] == ["file-2"]
     assert result["total_files"] == 1
+    assert result["status"] == "pending"
+    assert len(background_tasks.tasks) == 1
+    assert scheduled_batches == []
+    assert background_tasks.tasks[0].kwargs == {
+        "batch_id": "batch-1",
+        "language": "fra",
+    }
+
+
+def test_batch_route_returns_pending_results_without_processing_inline(monkeypatch):
+    configure_batch_route(monkeypatch)
+    app = FastAPI()
+    app.include_router(batches.router)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/batches",
+            json={
+                "folder_url": "https://drive.google.com/drive/folders/folder-1",
+                "selected_file_ids": ["file-1"],
+            },
+        )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+    assert response.json()["results"][0]["status"] == "pending"
 
 
 def test_batch_without_selection_keeps_processing_whole_folder(monkeypatch):
-    created_files = configure_batch_route(monkeypatch)
+    created_files, _ = configure_batch_route(monkeypatch)
     request = BatchCreateRequest(
         folder_url="https://drive.google.com/drive/folders/folder-1",
     )
 
-    batches.create_and_process_batch(request)
+    batches.create_and_process_batch(request, BackgroundTasks())
 
     assert [file["id"] for file in created_files] == ["file-1", "file-2"]
 
@@ -74,7 +118,7 @@ def test_batch_rejects_empty_or_unknown_selection(monkeypatch, selected_file_ids
     )
 
     with pytest.raises(HTTPException) as error:
-        batches.create_and_process_batch(request)
+        batches.create_and_process_batch(request, BackgroundTasks())
 
     assert error.value.status_code == 400
 

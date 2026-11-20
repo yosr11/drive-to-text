@@ -215,6 +215,7 @@ def extract_pdf_text_with_ocr(pdf_source, language="eng") -> dict:
         doc = pymupdf.open(str(pdf_source))
 
     results = []
+    used_ocr = False
 
     try:
         for page_number, pdf_page in enumerate(reader.pages):
@@ -257,6 +258,7 @@ def extract_pdf_text_with_ocr(pdf_source, language="eng") -> dict:
                         )
 
                         image_bytes = pix.tobytes("png")
+                        used_ocr = True
 
                         ocr_result = extract_image_text(
                             image_bytes,
@@ -279,6 +281,7 @@ def extract_pdf_text_with_ocr(pdf_source, language="eng") -> dict:
                 )
 
                 image_bytes = pix.tobytes("png")
+                used_ocr = True
 
                 # Appliquer l'OCR sur la page entière
                 ocr_result = extract_image_text(
@@ -296,7 +299,7 @@ def extract_pdf_text_with_ocr(pdf_source, language="eng") -> dict:
         doc.close()
 
     return {
-        "method": "pdf_text_ocr",
+        "method": "pdf_text_ocr" if used_ocr else "pdf_text",
         "text": "\n\n".join(results)
     }
 

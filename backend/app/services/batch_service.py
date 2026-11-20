@@ -147,31 +147,26 @@ def process_batch(
     # 2. Passer le batch au statut processing
     batch["status"] = "processing"
 
-    # 3. Traiter chaque fichier individuellement
-    for file_result in batch["results"]:
+    try:
+        # 3. Traiter chaque fichier individuellement et publier les compteurs.
+        for file_result in batch["results"]:
 
-        process_single_file(
-            file_result=file_result,
-            language=language
-        )
+            process_single_file(
+                file_result=file_result,
+                language=language
+            )
 
-    # 4. Calculer les statistiques
-    successful_files = sum(
-        1
-        for file in batch["results"]
-        if file["status"] == "done"
-    )
+            batch["successful_files"] = sum(
+                1 for file in batch["results"] if file["status"] == "done"
+            )
+            batch["failed_files"] = sum(
+                1 for file in batch["results"] if file["status"] == "failed"
+            )
+    except Exception:
+        batch["status"] = "failed"
+        raise
 
-    failed_files = sum(
-        1
-        for file in batch["results"]
-        if file["status"] == "failed"
-    )
-
-    batch["successful_files"] = successful_files
-    batch["failed_files"] = failed_files
-
-    # 5. Le batch est terminé, même si certains fichiers ont échoué.
+    # 4. Le batch est terminé, même si certains fichiers ont échoué.
     batch["status"] = "done"
 
     return deepcopy(batch)

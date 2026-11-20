@@ -1,6 +1,15 @@
 import { CheckCircle2, FileText, Hash } from 'lucide-react'
 import StatusBadge from './StatusBadge.jsx'
 
+function getMethodLabel(method) {
+  const labels = {
+    pdf_text: 'PDF parser',
+    pdf_text_ocr: 'PDF parser + OCR',
+    ocr: 'OCR',
+  }
+  return labels[method] || method
+}
+
 function ProcessingResults({ batch, activeFileId, onSelectResult }) {
   const results = Array.isArray(batch.results) ? batch.results : []
 
@@ -34,7 +43,7 @@ function ProcessingResults({ batch, activeFileId, onSelectResult }) {
                 </span>
                 <span className="result-file-info">
                   <strong>{result.filename}</strong>
-                  <span>{result.method ? `Method · ${result.method}` : result.error || 'No extraction method reported'}</span>
+                  <span>{result.method ? `Method · ${getMethodLabel(result.method)}` : result.error || 'Waiting for processing'}</span>
                 </span>
                 <StatusBadge status={result.status} />
                 <span className="result-action">{isActive ? 'Close text' : 'View text'}</span>

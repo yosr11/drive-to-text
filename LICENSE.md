@@ -1,4 +1,6 @@
-# Third-Party Licenses
+# Third-Party License Inventory
+
+For the required dependency/version/commercial-use matrix, see [`LICENSES.md`](./LICENSES.md).
 
 This project is licensed under the **MIT License**. See the [`LICENSE`](./LICENSE) file for the full license text.
 
@@ -89,8 +91,8 @@ For complete dependency license information, see:
 - [`backend/python-licenses.md`](./backend/python-licenses.md)
 - [`frontend/npm-licenses.md`](./frontend/npm-licenses.md)
 
-## 5. Important note
+## 5. PyMuPDF licensing
 
-PyMuPDF is dual-licensed under GNU AGPL-3.0 or a commercial Artifex license. Its licensing terms are separate from this project's MIT License.
+This project uses PyMuPDF under its GNU AGPL-3.0 option for this open-source POC. Closed-source commercial deployment requires a separate Artifex commercial license or replacing PyMuPDF. The project's MIT license does not supersede PyMuPDF's terms. See [`LICENSES.md`](./LICENSES.md) for the rationale and dependency versions.
 
 See: https://pymupdf.readthedocs.io/en/latest/about.html#license-and-copyright

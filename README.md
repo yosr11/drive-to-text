@@ -364,7 +364,7 @@ The project is distributed under the MIT License. See [`LICENSE`](./LICENSE) for
 
 Third-party dependency versions, licenses, commercial-use notes, and the PyMuPDF copyleft decision are documented in [`LICENSES.md`](./LICENSES.md). Detailed inventories are in [`backend/python-licenses.md`](./backend/python-licenses.md) and [`frontend/npm-licenses.md`](./frontend/npm-licenses.md); supplementary notices are in [`LICENSE.md`](./LICENSE.md).
 
-**Important:** This open-source POC uses PyMuPDF under its AGPL-3.0 option. It is not cleared for closed-source commercial deployment unless a separate Artifex commercial license is obtained or PyMuPDF is replaced. Tesseract OCR is Apache-2.0 licensed; Google Drive API usage is also subject to Google's applicable terms. The project's MIT license does not replace third-party licenses.
+Important: This open-source POC uses PyMuPDF under its AGPL-3.0 option. It is not cleared for closed-source commercial deployment unless a separate Artifex commercial license is obtained or PyMuPDF is replaced. Tesseract OCR is Apache-2.0 licensed; Google Drive API usage is also subject to Google's applicable terms. The project's MIT license does not replace third-party licenses.
 
 ## 13. Known Limitations
 
@@ -384,3 +384,17 @@ Third-party dependency versions, licenses, commercial-use notes, and the PyMuPDF
 - Support more document formats and configurable file-size/page limits.
 - Add deployment-specific CORS, secrets management, and production hosting guidance.
 - Expand automated API and frontend interaction tests.
+## Démo 
+
+
+
+https://github.com/user-attachments/assets/c4ccabd8-7dcc-48e9-8115-d8bd99bf20a5
+
+
+
+
+
+
+
+
+
